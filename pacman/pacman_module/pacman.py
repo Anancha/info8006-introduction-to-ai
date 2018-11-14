@@ -126,35 +126,33 @@ class GameState:
 
 
         # Copy current state
-        state = GameState(self)
-        state.data.numGhosts = self.data.numGhosts	
-        state.data.active_walls = self.data.active_walls
+        state = self.deepCopy()
         # Let agent's logic deal with its action's effects on the board
         if agentIndex == 0:  # Pacman is moving
             state.data._eaten = [False for i in range(state.getNumAgents())]
             PacmanRules.applyAction(state, action)
-        elif self.isGhost(agentIndex):                # A ghost is moving
+        elif state.isGhost(agentIndex):                # A ghost is moving
             GhostRules.applyAction(state, action, agentIndex)
-        elif self.isBlinkingWall(agentIndex): #A wall is toggled or not
-            WallRules.applyAction(state,action, agentIndex)
-        
+        elif state.isBlinkingWall(agentIndex): #A wall is toggled or not
+            WallRules.applyAction(state,action, agentIndex)            
+            
+            
                 
         # Time passes
         if agentIndex == 0:
             state.data.scoreChange += -TIME_PENALTY  # Penalty for waiting around
-        elif self.isGhost(agentIndex):
+        elif state.isGhost(agentIndex):
             GhostRules.decrementTimer(state.data.agentStates[agentIndex])
-        elif self.isBlinkingWall(agentIndex):
-            
-            if self.getBlinkingWallState(agentIndex):
-                wallX, wallY = self.data.agentStates[agentIndex-1].configuration.pos
+        elif state.isBlinkingWall(agentIndex):
+            if state.getBlinkingWallState(agentIndex):
+                wallX, wallY = state.data.agentStates[agentIndex].configuration.pos
                 wallX, wallY = int(wallX), int(wallY)
                 if state.getPacmanPosition() == (wallX,wallY):
                     PacmanRules.applyAction(state, Directions.REVERSE[state.getPacmanState().configuration.direction])
-                agentStates = self.data.agentStates
-                i=1
-                for a in agentStates[1:]:
-                    if self.isGhost(i) and a.configuration.pos == (wallX,wallY):
+                agentStates = state.data.agentStates
+                i=0
+                for a in agentStates:
+                    if state.isGhost(i) and a.configuration.pos == (wallX,wallY):
                         GhostRules.applyAction(state, Directions.REVERSE[a.configuration.direction],i,legalHalfTurn=True)
                     i += 1
         
@@ -170,6 +168,7 @@ class GameState:
         
         GameState.explored.add(self)
         GameState.explored.add(state)
+
         return state
 
     def getLegalWallActions(self, wallIndex):
@@ -184,14 +183,14 @@ class GameState:
         """
         return self.generateSuccessor(0, action)
 
-    def generatePacmanSuccessors(self):
+    def generatePacmanSuccessors(self, include_stop = False):
         """
         Returns a list of pairs of successor states and moves given the current state s for the pacman agent.
         """
         if (GameState.countExpanded >= GameState.maximumExpanded):
             return None
         GameState.countExpanded += 1
-        return [(self.generateSuccessor(0, action),action) for action in self.getLegalPacmanActions() if action != Directions.STOP]
+        return [(self.generateSuccessor(0, action),action) for action in self.getLegalPacmanActions() if not include_stop or action != Directions.STOP]
 
     def generateGhostSuccessors(self,index):
         """
@@ -208,8 +207,8 @@ class GameState:
         if (GameState.countExpanded >= GameState.maximumExpanded or index == 0):
             return None
         GameState.countExpanded += 1
-
-        return [(self.generateSuccessor(index, action),action) for action in self.getLegalActions(index)]
+        succs = [(self.generateSuccessor(index, action),action) for action in self.getLegalActions(index)]
+        return succs
 
     def getPacmanState(self):
         """
@@ -220,17 +219,27 @@ class GameState:
         """
         return self.data.agentStates[0].copy()
 
-    def getBlinkingWallState(self, wallIndex):
-        
-        wallX, wallY = self.data.agentStates[wallIndex-1].configuration.pos
-        return self.data.active_walls[int(wallX)][int(wallY)]
-        
+    def getBlinkingWallState(self, agentIndex):
+        if not self.isBlinkingWall(agentIndex):
+            raise Exception("Invalid index passed to getBlinkingWallState")
+        return self.data.agentStates[agentIndex].configuration.direction
+
+    def getBlinkingWallPosition(self, agentIndex):
+        if not self.isBlinkingWall(agentIndex):
+            raise Exception("Invalid index passed to getBlinkingWallState")
+        return self.data.agentStates[agentIndex].configuration.pos
 
     def getPacmanPosition(self):
         return self.data.agentStates[0].getPosition()
 
     def getGhostStates(self):
         return list(filter(lambda x : x.idx == 1, self.data.agentStates))
+
+    def getBlinkingWallActivities(self):
+        return list(map(lambda x : x.configuration.direction, filter(lambda x : x.idx == 2, self.data.agentStates)))
+
+    def getBlinkingWallPositions(self):
+        return list(map(lambda x : x.configuration.pos, filter(lambda x : x.idx == 2, self.data.agentStates)))
 
     def getGhostState(self, agentIndex):
         if not self.isGhost(agentIndex):
@@ -317,9 +326,6 @@ class GameState:
         """
         return self.data.layout.blinking_walls
 
-    def hasActiveWall(self,x,y):
-        return self.data.active_walls[x][y]
-
     def hasFood(self, x, y):
         return self.data.food[x][y]
 
@@ -404,8 +410,23 @@ class ClassicGameRules:
             quiet=False,
             catchExceptions=False):
         agents = [pacmanAgent] + ghostAgents[:layout.getNumGhosts()] + wallAgents[:layout.getNumWallAgents()]
+        
         initState = GameState()
         initState.initialize(layout, len(ghostAgents), len(wallAgents))
+
+        #Correct ghost agent indexes
+        z = 0
+        gagts = ghostAgents[:layout.getNumGhosts()]
+        for j in [i for i in range(len(agents)) if initState.isGhost(i)]:
+            gagts[z].index = j
+            z+=1
+        #Correct blinking wall agent indexes
+        z=0
+        wagts = wallAgents[:layout.getNumWallAgents()]
+        for j in [i for i in range(len(agents)) if initState.isBlinkingWall(i)]:
+            wagts[z].index = j
+            z+=1
+
         game = Game(agents, display, self, catchExceptions=catchExceptions)
         game.state = initState
         self.initialState = initState.deepCopy()
@@ -546,7 +567,7 @@ class GhostRules:
         if action not in legal:
             raise Exception("Illegal ghost action " + str(action))
 
-        ghostState = state.data.agentStates[ghostIndex]
+        ghostState = state.getGhostState(ghostIndex)
         speed = GhostRules.GHOST_SPEED
         if ghostState.scaredTimer > 0:
             speed /= 2.0
@@ -615,9 +636,10 @@ class WallRules:
         legal = WallRules.getLegalActions(state, wallIndex)
         if action not in legal:
             raise Exception("Illegal wall action " + str(action))
-        wallX,wallY = state.getBlinkingWall().asList()[wallIndex-state.data.numGhosts-1]
+        wallX,wallY = state.getBlinkingWallPosition(wallIndex)
         state.data.active_walls[wallX][wallY] = action
-        state.data.agentStates[wallIndex].configuration.direction = action
+        state.data.agentStates[wallIndex].configuration = state.data.agentStates[wallIndex].configuration.generateSuccessor(
+            action)
         
     applyAction = staticmethod(applyAction)  
 

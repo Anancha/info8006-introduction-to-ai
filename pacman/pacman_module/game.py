@@ -126,6 +126,8 @@ class Configuration:
         Actions are movement vectors.
         """
         x, y = self.pos
+        if vector == True or vector == False:
+            return Configuration((x,y),vector)
         dx, dy = vector
         direction = Actions.vectorToDirection(vector)
         if direction == Directions.STOP:
@@ -150,8 +152,10 @@ class AgentState:
     def __str__(self):
         if self.isPacman:
             return "Pacman: " + str(self.configuration)
+        elif self.idx == 1:
+            return "Ghost: " + str(self.configuration)
         else:
-            return ("Ghost: " if not isinstance(configuration.direction, bool) else "Wall: ") + str(self.configuration)
+            return "Wall: " + str(self.configuration)
 
     def __eq__(self, other):
         if other is None:
@@ -516,10 +520,10 @@ class GameStateData:
             agent_dir = agentState.configuration.direction
             if agentState.isPacman:
                 map[x][y] = self._pacStr(agent_dir)
-            elif agentState.idx <= self.numGhosts:
+            elif agentState.idx == 1:
                 map[x][y] = self._ghostStr(agent_dir)
-            else:
-                map[x][y] = self._bWallStr(agentState.configuration.direction)
+            elif agentState.idx == 2:
+                map[x][y] = self._bWallStr(agent_dir)
 
         for x, y in self.capsules:
             map[x][y] = 'o'
@@ -586,11 +590,11 @@ class GameStateData:
                 AgentState(
                     Configuration(
                         pos,
-                        True),
+                        Directions.STOP if idxAgent != 2 else True),
                     idxAgent))
         self.numGhosts = numGhosts
         self.numWalls = numWalls
-        self._eaten = [False for a in self.agentStates[:numGhosts+1]]
+        self._eaten = [False for a in self.agentStates if a.idx == 1]
 
 
 try:
