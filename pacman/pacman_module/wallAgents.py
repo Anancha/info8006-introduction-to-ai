@@ -7,8 +7,8 @@ from .game import Actions
 from . import util
 import numpy as np
 
-SWITCH_FROM_OPEN_P = 0.7
-SWITCH_FROM_CLOSE_P = 0.3
+SWITCH_FROM_OPEN_P = 0.3
+SWITCH_FROM_CLOSE_P = 0.7
 
 
 class Waller(Agent):

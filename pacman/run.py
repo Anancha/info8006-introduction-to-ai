@@ -102,7 +102,7 @@ if __name__ == '__main__':
     nghosts = 1000
     nblinkingwalls = 1000
     if (nghosts > 0):
-        gagts = [gagt(i + 1) for i in range(nghosts)]
+        gagts = [gagt(i) for i in range(nghosts)]
     else:
         gagts = []
     if (nblinkingwalls > 0):
